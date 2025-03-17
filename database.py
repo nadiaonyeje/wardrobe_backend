@@ -1,21 +1,16 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("MONGODB_URL")  # Make sure this is set in your .env file
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+client = AsyncIOMotorClient(DATABASE_URL)
+db = client.wardrobe_db  # Change "wardrobe_db" to whatever your database name is
 
-# Dependency to get database session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Collections
+users_collection = db["users"]
+items_collection = db["wardrobe_items"]
+categories_collection = db["categories"]
+outfits_collection = db["outfits"]

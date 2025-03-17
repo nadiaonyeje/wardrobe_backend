@@ -16,11 +16,19 @@ from authlib.integrations.starlette_client import OAuth
 from models import WardrobeItem
 from database import get_db
 import json
-
+from motor.motor_asyncio import AsyncIOMotorClient
 
 # Load environment variables
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
+client = AsyncIOMotorClient(DATABASE_URL)
+db = client.wardrobe_db  # Change "wardrobe_db" to whatever you want
+
+# Define collections
+wardrobe_collection = db["wardrobe_items"]
+category_collection = db["categories"]
+outfits_collection = db["outfits"]
+
 SECRET_KEY = "supersecretkey"  # Change this in production
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30

@@ -28,3 +28,9 @@ class Subcategory(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
     category_id = Column(Integer)
+
+class Outfit(Base):
+    __tablename__ = "outfits"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    items = Column(String)  # Store list of item IDs as a JSON string

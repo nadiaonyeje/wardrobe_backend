@@ -17,3 +17,14 @@ class WardrobeItem(Base):
     image_url = Column(String)
     price = Column(String)
     link = Column(String)
+
+class Category(Base):
+    __tablename__ = "categories"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True)
+
+class Subcategory(Base):
+    __tablename__ = "subcategories"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    category_id = Column(Integer)

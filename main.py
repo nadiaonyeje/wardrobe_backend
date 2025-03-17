@@ -15,6 +15,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from authlib.integrations.starlette_client import OAuth
 from models import WardrobeItem
 from database import get_db
+import json
 
 
 # Load environment variables
@@ -152,3 +153,25 @@ def add_item(name: str, image_url: str, price: str, link: str, db: Session = Dep
     db.add(item)
     db.commit()
     return {"message": "Item added successfully"}
+
+@router.post("/categories/")
+def create_category(name: str, db: Session = Depends(get_db)):
+    category = Category(name=name)
+    db.add(category)
+    db.commit()
+    return {"message": "Category added successfully"}
+
+@router.post("/subcategories/")
+def create_subcategory(name: str, category_id: int, db: Session = Depends(get_db)):
+    subcategory = Subcategory(name=name, category_id=category_id)
+    db.add(subcategory)
+    db.commit()
+    return {"message": "Subcategory added successfully"}
+
+
+@router.post("/outfits/")
+def create_outfit(name: str, items: list, db: Session = Depends(get_db)):
+    outfit = Outfit(name=name, items=json.dumps(items))
+    db.add(outfit)
+    db.commit()
+    return {"message": "Outfit created successfully"}

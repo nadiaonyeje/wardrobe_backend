@@ -10,3 +10,4 @@ jose
 pydantic
 authlib
 fastapi[all]
+database

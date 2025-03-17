@@ -11,3 +11,4 @@ pydantic
 authlib
 fastapi[all]
 database
+json

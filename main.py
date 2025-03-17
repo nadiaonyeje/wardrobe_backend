@@ -1,5 +1,5 @@
 # main.py - FastAPI Backend
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, status, Request
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, status, Request, APIRouter
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -13,9 +13,30 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from authlib.integrations.starlette_client import OAuth
+from models import WardrobeItem
+from database import get_db
 
+
+# Load environment variables
 load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
+SECRET_KEY = "supersecretkey"  # Change this in production
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+# Cloudinary Configuration
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET")
+)
+
+# Database Setup
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# FastAPI App
 app = FastAPI()
 
 # OAuth Setup
@@ -39,28 +60,6 @@ async def callback_google(request: Request):
     token = await oauth.google.authorize_access_token(request)
     user_info = await oauth.google.parse_id_token(request, token)
     return {"email": user_info["email"], "name": user_info["name"]}
-
-# Load environment variables
-load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
-SECRET_KEY = "supersecretkey"  # Change this in production
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-# Cloudinary Configuration
-cloudinary.config(
-    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-    api_key=os.getenv("CLOUDINARY_API_KEY"),
-    api_secret=os.getenv("CLOUDINARY_API_SECRET")
-)
-
-# Database Setup
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-# FastAPI App
-app = FastAPI()
 
 # Dependency to get DB session
 def get_db():
@@ -143,3 +142,13 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
 def upload_image(file: UploadFile = File(...)):
     upload_result = cloudinary.uploader.upload(file.file)
     return {"image_url": upload_result["secure_url"]}
+
+
+router = APIRouter()
+
+@router.post("/items/")
+def add_item(name: str, image_url: str, price: str, link: str, db: Session = Depends(get_db)):
+    item = WardrobeItem(name=name, image_url=image_url, price=price, link=link)
+    db.add(item)
+    db.commit()
+    return {"message": "Item added successfully"}

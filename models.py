@@ -9,3 +9,11 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     password = Column(String)
+
+class WardrobeItem(Base):
+    __tablename__ = "wardrobe_items"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    image_url = Column(String)
+    price = Column(String)
+    link = Column(String)

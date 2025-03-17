@@ -1,5 +1,5 @@
 # main.py - FastAPI Backend
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, status
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, status, Request
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -12,6 +12,33 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from authlib.integrations.starlette_client import OAuth
+
+load_dotenv()
+
+app = FastAPI()
+
+# OAuth Setup
+oauth = OAuth()
+oauth.register(
+    "google",
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    authorize_url="https://accounts.google.com/o/oauth2/auth",
+    authorize_params={"response_type": "code", "scope": "email profile"},
+    access_token_url="https://oauth2.googleapis.com/token",
+    client_kwargs={"scope": "openid email profile"},
+)
+
+@app.get("/login/google")
+async def login_google(request: Request):
+    return await oauth.google.authorize_redirect(request, redirect_uri="YOUR_FRONTEND_URL/callback")
+
+@app.get("/callback")
+async def callback_google(request: Request):
+    token = await oauth.google.authorize_access_token(request)
+    user_info = await oauth.google.parse_id_token(request, token)
+    return {"email": user_info["email"], "name": user_info["name"]}
 
 # Load environment variables
 load_dotenv()

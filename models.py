@@ -1,38 +1,29 @@
-# models.py - Database Models
-from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+# models.py - MongoDB Collections (No SQLAlchemy Needed)
 
-Base = declarative_base()
+# Since MongoDB is schema-less, we do not need SQLAlchemy models.
+# Instead, collections are managed in database.py using Motor (MongoDB async driver).
 
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    password = Column(String)
+# Example: Defining JSON schemas for data validation (optional)
+from pydantic import BaseModel
+from typing import List
 
-class WardrobeItem(Base):
-    __tablename__ = "wardrobe_items"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    image_url = Column(String)
-    price = Column(String)
-    link = Column(String)
+class UserSchema(BaseModel):
+    email: str
+    password: str
 
-class Category(Base):
-    __tablename__ = "categories"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True)
+class WardrobeItemSchema(BaseModel):
+    name: str
+    image_url: str
+    price: str
+    link: str
 
-class Subcategory(Base):
-    __tablename__ = "subcategories"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
-    category_id = Column(Integer, ForeignKey("categories.id"))
-    category = relationship("Category")
+class CategorySchema(BaseModel):
+    name: str
 
-class Outfit(Base):
-    __tablename__ = "outfits"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
-    items = Column(String)  # Stores item IDs as a JSON string
+class SubcategorySchema(BaseModel):
+    name: str
+    category_id: str  # Store category ID as string
+
+class OutfitSchema(BaseModel):
+    name: str
+    items: List[str]  # List of item IDs

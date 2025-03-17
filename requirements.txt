@@ -3,8 +3,12 @@ uvicorn
 sqlalchemy
 psycopg2
 python-dotenv
-passlib[bcrypt]
+python-multipart
 cloudinary
+passlib[bcrypt]
 authlib
 fastapi[all]
 requests
+pydantic
+jose
+motor  # Only needed if using MongoDB, remove if using PostgreSQL

@@ -8,3 +8,5 @@ cloudinary
 passlib
 jose
 pydantic
+authlib
+fastapi[all]

@@ -11,3 +11,4 @@ pydantic
 jose
 motor  # MongoDB async driver
 beautifulsoup4
+python-jose

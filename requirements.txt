@@ -12,3 +12,4 @@ authlib
 fastapi[all]
 database
 json
+motor

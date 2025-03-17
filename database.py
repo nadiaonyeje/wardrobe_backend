@@ -13,4 +13,5 @@ db = client.wardrobe_db  # Change "wardrobe_db" to whatever your database name i
 users_collection = db["users"]
 items_collection = db["wardrobe_items"]
 categories_collection = db["categories"]
+subcategories_collection = db["subcategories"]  
 outfits_collection = db["outfits"]

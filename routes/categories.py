@@ -1,20 +1,15 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from models import Category, Subcategory
-from database import get_db
+from fastapi import APIRouter, HTTPException
+from database import categories_collection, subcategories_collection
+from models import CategorySchema, SubcategorySchema
 
 router = APIRouter()
 
 @router.post("/categories/")
-def create_category(name: str, db: Session = Depends(get_db)):
-    category = Category(name=name)
-    db.add(category)
-    db.commit()
-    return {"message": "Category created"}
+async def create_category(category: CategorySchema):
+    result = await categories_collection.insert_one(category.dict())
+    return {"message": "Category created", "id": str(result.inserted_id)}
 
 @router.post("/subcategories/")
-def create_subcategory(name: str, category_id: int, db: Session = Depends(get_db)):
-    subcategory = Subcategory(name=name, category_id=category_id)
-    db.add(subcategory)
-    db.commit()
-    return {"message": "Subcategory created"}
+async def create_subcategory(subcategory: SubcategorySchema):
+    result = await subcategories_collection.insert_one(subcategory.dict())
+    return {"message": "Subcategory created", "id": str(result.inserted_id)}

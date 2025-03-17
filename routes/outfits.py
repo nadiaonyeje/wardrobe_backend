@@ -1,18 +1,15 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from models import Outfit
-from database import get_db
-import json
+from fastapi import APIRouter, HTTPException
+from database import outfits_collection
+from models import OutfitSchema
 
 router = APIRouter()
 
 @router.post("/outfits/")
-def create_outfit(name: str, items: list, db: Session = Depends(get_db)):
-    outfit = Outfit(name=name, items=json.dumps(items))
-    db.add(outfit)
-    db.commit()
-    return {"message": "Outfit created"}
+async def create_outfit(outfit: OutfitSchema):
+    result = await outfits_collection.insert_one(outfit.dict())
+    return {"message": "Outfit created", "id": str(result.inserted_id)}
 
 @router.get("/outfits/")
-def get_outfits(db: Session = Depends(get_db)):
-    return db.query(Outfit).all()
+async def get_outfits():
+    outfits = await outfits_collection.find().to_list(length=100)
+    return outfits

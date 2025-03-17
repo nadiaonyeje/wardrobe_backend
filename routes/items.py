@@ -12,17 +12,42 @@ async def extract_item(url: str):
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to access URL")
+
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Attempt to extract name, price, and image (varies by site)
-        name = soup.find("h1").text if soup.find("h1") else "Unknown Product"
-        price = soup.find(class_="price").text if soup.find(class_="price") else "Price Not Found"
+        # Attempt to extract name, price, and image (Handle different site structures)
+        name = (
+            soup.find("h1").text.strip()
+            if soup.find("h1")
+            else soup.find("title").text.strip()
+            if soup.find("title")
+            else "Unknown Product"
+        )
+
+        # Look for price in common classes
+        price_classes = ["price", "product-price", "current-price", "sale-price"]
+        price = "Price Not Found"
+        for cls in price_classes:
+            price_tag = soup.find(class_=cls)
+            if price_tag:
+                price = price_tag.text.strip()
+                break
+
+        # Extract image
         image_tag = soup.find("img")
-        image_url = image_tag["src"] if image_tag and "src" in image_tag.attrs else None
+        image_url = (
+            image_tag["src"]
+            if image_tag and "src" in image_tag.attrs
+            else "No image found"
+        )
 
-        if not image_url:
-            raise HTTPException(status_code=400, detail="Could not extract image")
+        if not image_url.startswith("http"):
+            image_url = url + image_url  # Fix relative URLs
 
+        # Save to MongoDB
         new_item = {
             "name": name,
             "image_url": image_url,

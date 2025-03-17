@@ -1,185 +1,29 @@
 # main.py - FastAPI Backend
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, status, Request, APIRouter
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from fastapi import FastAPI
+from routes import items, users, categories, outfits
+from fastapi.middleware.cors import CORSMiddleware
 import os
-import cloudinary
-import cloudinary.uploader
 from dotenv import load_dotenv
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from pydantic import BaseModel
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from authlib.integrations.starlette_client import OAuth
-from models import WardrobeItem
-from database import get_db
-import json
-from motor.motor_asyncio import AsyncIOMotorClient
 
 # Load environment variables
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
-client = AsyncIOMotorClient(DATABASE_URL)
-db = client.wardrobe_db  # Change "wardrobe_db" to whatever you want
 
-# Define collections
-wardrobe_collection = db["wardrobe_items"]
-category_collection = db["categories"]
-outfits_collection = db["outfits"]
-
-SECRET_KEY = "supersecretkey"  # Change this in production
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-# Cloudinary Configuration
-cloudinary.config(
-    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-    api_key=os.getenv("CLOUDINARY_API_KEY"),
-    api_secret=os.getenv("CLOUDINARY_API_SECRET")
-)
-
-# Database Setup
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-# FastAPI App
 app = FastAPI()
 
-# OAuth Setup
-oauth = OAuth()
-oauth.register(
-    "google",
-    client_id=os.getenv("GOOGLE_CLIENT_ID"),
-    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-    authorize_url="https://accounts.google.com/o/oauth2/auth",
-    authorize_params={"response_type": "code", "scope": "email profile"},
-    access_token_url="https://oauth2.googleapis.com/token",
-    client_kwargs={"scope": "openid email profile"},
+# CORS Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change this to specific frontend domains in production
+    allow_credentials=True,
+    allow_methods=["*"]
 )
 
-@app.get("/login/google")
-async def login_google(request: Request):
-    return await oauth.google.authorize_redirect(request, redirect_uri="YOUR_FRONTEND_URL/callback")
+# Include API routes
+app.include_router(items.router)
+app.include_router(users.router)
+app.include_router(categories.router)
+app.include_router(outfits.router)
 
-@app.get("/callback")
-async def callback_google(request: Request):
-    token = await oauth.google.authorize_access_token(request)
-    user_info = await oauth.google.parse_id_token(request, token)
-    return {"email": user_info["email"], "name": user_info["name"]}
-
-# Dependency to get DB session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# User Model
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    password = Column(String)
-
-# Initialize Database Tables
-Base.metadata.create_all(bind=engine)
-
-# Password Hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-def hash_password(password: str):
-    return pwd_context.hash(password)
-
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-# JWT Authentication
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=15))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication")
-        return email
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-# Pydantic Models
-class UserCreate(BaseModel):
-    email: str
-    password: str
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-# API Routes
 @app.get("/")
-def read_root():
+def home():
     return {"message": "Wardrobe API is running"}
-
-@app.post("/register/", response_model=UserCreate)
-def register(user: UserCreate, db: Session = Depends(get_db)):
-    hashed_password = hash_password(user.password)
-    db_user = User(email=user.email, password=hashed_password)
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return {"email": db_user.email}
-
-@app.post("/token", response_model=Token)
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
-    access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.post("/upload/")
-def upload_image(file: UploadFile = File(...)):
-    upload_result = cloudinary.uploader.upload(file.file)
-    return {"image_url": upload_result["secure_url"]}
-
-
-router = APIRouter()
-
-@router.post("/items/")
-def add_item(name: str, image_url: str, price: str, link: str, db: Session = Depends(get_db)):
-    item = WardrobeItem(name=name, image_url=image_url, price=price, link=link)
-    db.add(item)
-    db.commit()
-    return {"message": "Item added successfully"}
-
-@router.post("/categories/")
-def create_category(name: str, db: Session = Depends(get_db)):
-    category = Category(name=name)
-    db.add(category)
-    db.commit()
-    return {"message": "Category added successfully"}
-
-@router.post("/subcategories/")
-def create_subcategory(name: str, category_id: int, db: Session = Depends(get_db)):
-    subcategory = Subcategory(name=name, category_id=category_id)
-    db.add(subcategory)
-    db.commit()
-    return {"message": "Subcategory added successfully"}
-
-
-@router.post("/outfits/")
-def create_outfit(name: str, items: list, db: Session = Depends(get_db)):
-    outfit = Outfit(name=name, items=json.dumps(items))
-    db.add(outfit)
-    db.commit()
-    return {"message": "Outfit created successfully"}

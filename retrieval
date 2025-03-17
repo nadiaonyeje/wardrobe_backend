@@ -1,6 +1,0 @@
-
-
-@app.get("/items/")
-async def get_items():
-    items = await wardrobe_collection.find().to_list(length=100)
-    return items

@@ -10,3 +10,4 @@ requests
 pydantic
 jose
 motor  # MongoDB async driver
+beautifulsoup4

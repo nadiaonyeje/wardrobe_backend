@@ -1,6 +1,7 @@
 # models.py - Database Models
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 
 Base = declarative_base()
 
@@ -27,10 +28,11 @@ class Subcategory(Base):
     __tablename__ = "subcategories"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
-    category_id = Column(Integer)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    category = relationship("Category")
 
 class Outfit(Base):
     __tablename__ = "outfits"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
-    items = Column(String)  # Store list of item IDs as a JSON string
+    items = Column(String)  # Stores item IDs as a JSON string

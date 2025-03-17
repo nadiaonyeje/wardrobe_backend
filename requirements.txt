@@ -1,7 +1,5 @@
 fastapi
 uvicorn
-sqlalchemy
-psycopg2
 python-dotenv
 python-multipart
 cloudinary
@@ -11,4 +9,4 @@ fastapi[all]
 requests
 pydantic
 jose
-motor  # Only needed if using MongoDB, remove if using PostgreSQL
+motor  # MongoDB async driver

@@ -3,13 +3,8 @@ uvicorn
 sqlalchemy
 psycopg2
 python-dotenv
-python-multipart
+passlib[bcrypt]
 cloudinary
-passlib
-jose
-pydantic
 authlib
 fastapi[all]
-database
-json
-motor
+requests

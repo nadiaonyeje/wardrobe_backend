@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("MONGODB_URL")  # Make sure this is set in your .env file
+DATABASE_URL = os.getenv("MONGO_URI")  # Make sure this is set in your .env file
 
 client = AsyncIOMotorClient(DATABASE_URL)
 db = client.wardrobe_db  # Change "wardrobe_db" to whatever your database name is

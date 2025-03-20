@@ -14,3 +14,4 @@ python-jose
 starlette
 bcrypt
 httpx
+itsdangerous

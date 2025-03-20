@@ -12,6 +12,6 @@ motor  # MongoDB async driver
 beautifulsoup4
 python-jose
 starlette
-bcrypt
+bcrypt==4.0.1
 httpx
 itsdangerous

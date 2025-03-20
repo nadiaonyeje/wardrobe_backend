@@ -4,11 +4,15 @@ from routes import items, users, categories, outfits
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
+from starlette.middleware.sessions import SessionMiddleware
+
 
 # Load environment variables
 load_dotenv()
 
 app = FastAPI()
+
+app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
 
 # CORS Configuration
 app.add_middleware(

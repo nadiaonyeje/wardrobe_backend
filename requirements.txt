@@ -13,3 +13,4 @@ motor  # MongoDB async driver
 beautifulsoup4
 python-jose
 gunicorn
+starlette

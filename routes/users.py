@@ -67,7 +67,7 @@ oauth.register(
 
 @router.get("/auth/google")
 async def google_login(request: Request):
-    return await oauth.google.authorize_redirect(request, "BACKEND_URL/auth/google/callback")
+    return await oauth.google.authorize_redirect(request, "https://wardrobe-backend-o0fr.onrender.com/auth/google/callback")
 
 @router.get("/auth/google/callback")
 async def google_callback(request: Request):

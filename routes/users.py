@@ -6,6 +6,8 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
+from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -21,35 +23,58 @@ def create_access_token(data: dict):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 # ✅ Register a New User (Signup)
-@router.post("/register/")
-async def register(email: str, password: str, first_name: str, last_name: str):
-    existing_user = await users_collection.find_one({"email": email})
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+class RegisterRequest(BaseModel):
+    email: str
+    username: str
+    password: str
+    first_name: str
+    last_name: str
 
-    hashed_password = pwd_context.hash(password)
+@router.post("/register/")
+async def register(request_data: RegisterRequest):
+    # Check if email OR username already exists
+    existing_user = await users_collection.find_one({
+        "$or": [{"email": request_data.email}, {"username": request_data.username}]
+    })
+
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email or username already registered")
+
+    hashed_password = pwd_context.hash(request_data.password)
+    
     new_user = {
-        "email": email,
+        "email": request_data.email,
+        "username": request_data.username,
         "password": hashed_password,
-        "first_name": first_name,
-        "last_name": last_name,
+        "first_name": request_data.first_name,
+        "last_name": request_data.last_name,
     }
+
     await users_collection.insert_one(new_user)
-    return {"message": "User registered successfully"}
+    return {"message": "User registered successfully"}}
 
 # ✅ Login User with Email & Password
+# ✅ Define a Pydantic model for login request
+class LoginRequest(BaseModel):
+    identifier: str  # Can be email or username
+    password: str
+
 @router.post("/token/")
-async def login(email: str, password: str):
-    user = await users_collection.find_one({"email": email})
-    if not user or not pwd_context.verify(password, user["password"]):
+async def login(request_data: LoginRequest):
+    # Find user by either email or username
+    user = await users_collection.find_one({
+        "$or": [{"email": request_data.identifier}, {"username": request_data.identifier}]
+    })
+
+    if not user or not pwd_context.verify(request_data.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     access_token = create_access_token(data={"sub": user["email"]})
-    
-    # ✅ Include first_name and last_name if available
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
+        "username": user.get("username", ""),
         "first_name": user.get("first_name", ""),
         "last_name": user.get("last_name", ""),
     }

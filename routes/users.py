@@ -52,7 +52,7 @@ async def login_or_register(user_data: UserLoginRequest):
     "users_id": str(existing_user["_id"]),  # ✅ Use _id as users_id
     "message": "Login successful"
 }
-        }
+    
     
     # ✅ Ensure username & email are unique (case-insensitive)
     if user_data.username:

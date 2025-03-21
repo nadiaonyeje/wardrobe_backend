@@ -1,53 +1,40 @@
-from fastapi import APIRouter, Depends, HTTPException
-from authlib.integrations.starlette_client import OAuth
-from starlette.requests import Request
-from motor.motor_asyncio import AsyncIOMotorClient
-from passlib.context import CryptContext
-from jose import jwt
-from datetime import datetime, timedelta
-import os
-from pydantic import BaseModel
-from typing import Optional
-from utils import create_access_token
+from fastapi import APIRouter, HTTPException
+from models import User
+from database import users_collection
+from bson import ObjectId
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-SECRET_KEY = "your_secret_key"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+@router.post("/social-login")
+async def social_login(data: dict):
+    email = data.get("email")
+    username = data.get("username")
+    first_name = data.get("first_name", "User")
+    last_name = data.get("last_name", "")
 
-client = AsyncIOMotorClient(os.getenv("MONGO_URI"))
-db = client.wardrobe_db
-users_collection = db.users
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required for social login")
 
-class UserLoginRequest(BaseModel):
-    email_or_username: str
-    password: str
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    username: Optional[str] = None
-
-@router.post("/token/")
-async def login_or_register(user_data: UserLoginRequest):
-    email_or_username_lower = user_data.email_or_username.lower()
-
-    existing_user = await users_collection.find_one({
-        "$or": [{"email": email_or_username_lower}, {"username": email_or_username_lower}]
-    })
+    existing_user = await users_collection.find_one({"email": email})
 
     if existing_user:
-        if not pwd_context.verify(user_data.password, existing_user["password"]):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-
-        access_token = create_access_token(data={"sub": existing_user["email"]})
-
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "users_id": str(existing_user["_id"]),  # ✅ Returning users_id
-            "first_name": existing_user.get("first_name", ""),
-            "last_name": existing_user.get("last_name", ""),
-            "username": existing_user.get("username", ""),
-            "message": "Login successful"
+        user_id = str(existing_user["_id"])
+        print("✅ Found existing user:", user_id)
+    else:
+        new_user = {
+            "email": email,
+            "username": username or email,
+            "first_name": first_name,
+            "last_name": last_name,
+            "password": "",  # no password for social login
         }
+        result = await users_collection.insert_one(new_user)
+        user_id = str(result.inserted_id)
+        print("✅ Created new social user:", user_id)
+
+    return {
+        "user_id": user_id,
+        "username": username or email,
+        "first_name": first_name,
+        "last_name": last_name,
+    }

@@ -2,18 +2,15 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import requests
 from bs4 import BeautifulSoup
-from database import items_collection  # ✅ Using your existing collection
+from database import items_collection
 
 router = APIRouter()
 
-# ✅ Model for receiving the pasted link
 class ItemRequest(BaseModel):
     url: str
-    users_id: str  # ✅ Added users_id to model
+    users_id: str  # ✅ Ensure items are saved per user
 
-# ✅ Function to extract price more reliably
 def extract_price(soup):
-    """Extracts price by checking multiple possible selectors."""
     possible_price_selectors = [
         {"name": "meta", "attrs": {"property": "product:price:amount"}},
         {"name": "meta", "attrs": {"property": "og:price:amount"}},
@@ -23,40 +20,33 @@ def extract_price(soup):
 
     for selector in possible_price_selectors:
         tag = soup.find(selector["name"], selector.get("attrs", {}))
-        if tag and tag.get("content"):  # Check meta tags
+        if tag and tag.get("content"):
             return tag["content"]
-        elif tag and tag.text.strip():  # Check regular tags
+        elif tag and tag.text.strip():
             return tag.text.strip()
 
     return "Unknown Price"
 
-# ✅ Save item from a pasted link
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
     if not item.users_id:
         raise HTTPException(status_code=400, detail="User ID is required")
 
     url = item.url.strip()
-    if not url.startswith("http"):  # ✅ Ensure the URL is valid
-        raise HTTPException(status_code=400, detail="Invalid URL provided")
-
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # ✅ Extract product details
         title = soup.find("title").text.strip() if soup.find("title") else "Unknown Product"
-        price = extract_price(soup)  # ✅ More reliable price extraction
-        image = soup.find("meta", property="og:image")
-        image_url = image["content"] if image and "content" in image.attrs else ""
+        price = extract_price(soup)
+        image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
 
-        # ✅ Save item to database with users_id
         item_data = {
-            "users_id": item.users_id,  # ✅ Ensure user ownership
+            "users_id": item.users_id,  
             "title": title,
             "price": price,
-            "image_url": image_url,
+            "image_url": image,
             "source": url
         }
         saved_item = await items_collection.insert_one(item_data)
@@ -66,7 +56,6 @@ async def save_item(item: ItemRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ✅ Get items filtered by users_id
 @router.get("/items/{users_id}")
 async def get_items(users_id: str):
     items = await items_collection.find({"users_id": users_id}).to_list(100)

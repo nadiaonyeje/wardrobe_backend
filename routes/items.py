@@ -49,7 +49,7 @@ async def save_item(item: ItemRequest):
 
         # ✅ Save item to database with user_id
         item_data = {
-            "users_id": item.user_id,  # ✅ Store user_id for per-user items
+            "users_id": item.users_id,  # ✅ Store user_id for per-user items
             "title": title,
             "price": price,
             "image_url": image,

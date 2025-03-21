@@ -9,13 +9,7 @@ router = APIRouter()
 # ✅ Model for receiving the pasted link
 class ItemRequest(BaseModel):
     url: str
-   item_data = {
-    "users_id": item.users_id,  # ✅ Store users_id correctly
-    "title": title,
-    "price": price,
-    "image_url": image,
-    "source": url  # Storing the original source link
-}
+    users_id: str  # ✅ Added users_id to model
 
 # ✅ Function to extract price more reliably
 def extract_price(soup):
@@ -43,6 +37,9 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=400, detail="User ID is required")
 
     url = item.url.strip()
+    if not url.startswith("http"):  # ✅ Ensure the URL is valid
+        raise HTTPException(status_code=400, detail="Invalid URL provided")
+
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
@@ -51,14 +48,15 @@ async def save_item(item: ItemRequest):
         # ✅ Extract product details
         title = soup.find("title").text.strip() if soup.find("title") else "Unknown Product"
         price = extract_price(soup)  # ✅ More reliable price extraction
-        image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
+        image = soup.find("meta", property="og:image")
+        image_url = image["content"] if image and "content" in image.attrs else ""
 
-        # ✅ Save item to database with user_id
+        # ✅ Save item to database with users_id
         item_data = {
-            "users_id": item.users_id,  # ✅ Store user_id for per-user items
+            "users_id": item.users_id,  # ✅ Ensure user ownership
             "title": title,
             "price": price,
-            "image_url": image,
+            "image_url": image_url,
             "source": url
         }
         saved_item = await items_collection.insert_one(item_data)
@@ -68,7 +66,7 @@ async def save_item(item: ItemRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ✅ Get items filtered by user_id
+# ✅ Get items filtered by users_id
 @router.get("/items/{users_id}")
 async def get_items(users_id: str):
     items = await items_collection.find({"users_id": users_id}).to_list(100)

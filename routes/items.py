@@ -13,6 +13,7 @@ class ItemRequest(BaseModel):
 
 # ✅ Function to extract price more reliably
 def extract_price(soup):
+    """Extracts price by checking multiple possible selectors."""
     possible_price_selectors = [
         {"name": "meta", "attrs": {"property": "product:price:amount"}},
         {"name": "meta", "attrs": {"property": "og:price:amount"}},
@@ -22,9 +23,9 @@ def extract_price(soup):
 
     for selector in possible_price_selectors:
         tag = soup.find(selector["name"], selector.get("attrs", {}))
-        if tag and tag.get("content"):
+        if tag and tag.get("content"):  # Check meta tags
             return tag["content"]
-        elif tag and tag.text.strip():
+        elif tag and tag.text.strip():  # Check regular tags
             return tag.text.strip()
 
     return "Unknown Price"
@@ -32,42 +33,39 @@ def extract_price(soup):
 # ✅ Save item from a pasted link
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
-    url = item.url
+    if not item.user_id:
+        raise HTTPException(status_code=400, detail="User ID is required")
 
+    url = item.url.strip()
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
         soup = BeautifulSoup(response.text, "html.parser")
 
         # ✅ Extract product details
-        title = soup.find("title").text if soup.find("title") else "Unknown Product"
+        title = soup.find("title").text.strip() if soup.find("title") else "Unknown Product"
         price = extract_price(soup)  # ✅ More reliable price extraction
         image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
 
+        # ✅ Save item to database with user_id
         item_data = {
-            "user_id": item.user_id,  # ✅ Store user_id
+            "user_id": item.user_id,  # ✅ Store user_id for per-user items
             "title": title,
             "price": price,
             "image_url": image,
             "source": url
         }
-
-        print("✅ Saving item to DB:", item_data)  # DEBUGGING
         saved_item = await items_collection.insert_one(item_data)
-        print("✅ Inserted ID:", saved_item.inserted_id)  # DEBUGGING
-
         item_data["id"] = str(saved_item.inserted_id)
+
         return item_data
     except Exception as e:
-        print("❌ Error saving item:", str(e))  # DEBUGGING
         raise HTTPException(status_code=500, detail=str(e))
 
 # ✅ Get items filtered by user_id
 @router.get("/items/{user_id}")
 async def get_items(user_id: str):
-    print(f"🔎 Fetching items for user: {user_id}")  # DEBUGGING
     items = await items_collection.find({"user_id": user_id}).to_list(100)
-    print("📦 Retrieved items:", items)  # DEBUGGING
     for item in items:
         item["id"] = str(item["_id"])
         del item["_id"]

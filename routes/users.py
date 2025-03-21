@@ -41,12 +41,12 @@ async def login_or_register(user_data: UserLoginRequest):
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         # ✅ Generate JWT token
-        access_token = create_access_token(data={"sub": existing_user["email"], "user_id": str(existing_user["_id"])})
+        access_token = create_access_token(data={"sub": existing_user["email"], "users_id": str(existing_user["_id"])})
 
         return {
             "access_token": access_token,
             "token_type": "bearer",
-            "user_id": str(existing_user["_id"]),
+            "users_id": str(existing_user["_id"]),
             "first_name": existing_user.get("first_name", ""),
             "last_name": existing_user.get("last_name", ""),
             "username": existing_user.get("username", ""),
@@ -77,12 +77,12 @@ async def login_or_register(user_data: UserLoginRequest):
     inserted_user = await users_collection.insert_one(new_user)
 
     # ✅ Generate JWT token
-    access_token = create_access_token(data={"sub": email_or_username_lower, "user_id": str(inserted_user.inserted_id)})
+    access_token = create_access_token(data={"sub": email_or_username_lower, "users_id": str(inserted_user.inserted_id)})
 
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user_id": str(inserted_user.inserted_id),
+        "users_id": str(inserted_user.inserted_id),
         "first_name": new_user["first_name"],
         "last_name": new_user["last_name"],
         "username": new_user["username"],

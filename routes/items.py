@@ -9,7 +9,13 @@ router = APIRouter()
 # ✅ Model for receiving the pasted link
 class ItemRequest(BaseModel):
     url: str
-    "users_id" = item.users_id  # ✅ Ensure it matches what’s returned in login
+   item_data = {
+    "users_id": item.users_id,  # ✅ Store users_id correctly
+    "title": title,
+    "price": price,
+    "image_url": image,
+    "source": url  # Storing the original source link
+}
 
 # ✅ Function to extract price more reliably
 def extract_price(soup):

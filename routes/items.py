@@ -9,7 +9,7 @@ router = APIRouter()
 # ✅ Model for receiving the pasted link
 class ItemRequest(BaseModel):
     url: str
-    user_id: str  # ✅ Ensure the item is saved per user
+    users_id: str  # ✅ Ensure the item is saved per user
 
 # ✅ Function to extract price more reliably
 def extract_price(soup):
@@ -33,7 +33,7 @@ def extract_price(soup):
 # ✅ Save item from a pasted link
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
-    if not item.user_id:
+    if not item.users_id:
         raise HTTPException(status_code=400, detail="User ID is required")
 
     url = item.url.strip()
@@ -49,7 +49,7 @@ async def save_item(item: ItemRequest):
 
         # ✅ Save item to database with user_id
         item_data = {
-            "user_id": item.user_id,  # ✅ Store user_id for per-user items
+            "users_id": item.user_id,  # ✅ Store user_id for per-user items
             "title": title,
             "price": price,
             "image_url": image,
@@ -63,9 +63,9 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ✅ Get items filtered by user_id
-@router.get("/items/{user_id}")
-async def get_items(user_id: str):
-    items = await items_collection.find({"user_id": user_id}).to_list(100)
+@router.get("/items/{users_id}")
+async def get_items(users_id: str):
+    items = await items_collection.find({"users_id": users_id}).to_list(100)
     for item in items:
         item["id"] = str(item["_id"])
         del item["_id"]

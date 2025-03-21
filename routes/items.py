@@ -1,42 +1,42 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import requests
 from bs4 import BeautifulSoup
-from database import items_collection  # ✅ Using your existing collection
+from database import items_collection
+from utils import get_current_user
 
 router = APIRouter()
 
-# ✅ Model for receiving the pasted link
 class ItemRequest(BaseModel):
     url: str
 
-# ✅ Save item from a pasted link
 @router.post("/save-item/")
-async def save_item(item: ItemRequest):
+async def save_item(item: ItemRequest, user: dict = Depends(get_current_user)):
     url = item.url
+    user_id = user["id"]
 
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # ✅ Extract product details (Modify based on the website's structure)
         title = soup.find("title").text if soup.find("title") else "Unknown Product"
         price = soup.find(class_="price").text if soup.find(class_="price") else "Unknown Price"
         image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
 
-        # ✅ Prevent duplicate entries by checking if the item already exists
-        existing_item = await items_collection.find_one({"source": url})
+        # Prevent duplicate entries for the same user
+        existing_item = await items_collection.find_one({"source": url, "user_id": user_id})
         if existing_item:
-            return {**existing_item, "id": str(existing_item["_id"])}  # Return existing item with id
+            return {**existing_item, "id": str(existing_item["_id"])}
 
-        # ✅ Save item to database
         item_data = {
             "title": title,
             "price": price,
             "image_url": image,
-            "source": url  # Storing the original source link
+            "source": url,
+            "user_id": user_id,  # Associate with user
         }
+
         saved_item = await items_collection.insert_one(item_data)
         item_data["id"] = str(saved_item.inserted_id)
 
@@ -44,11 +44,13 @@ async def save_item(item: ItemRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ✅ Get all saved items
 @router.get("/items/")
-async def get_items():
-    items = await items_collection.find().to_list(100)
+async def get_items(user: dict = Depends(get_current_user)):
+    user_id = user["id"]
+    items = await items_collection.find({"user_id": user_id}).to_list(100)
+    
     for item in items:
-        item["id"] = str(item["_id"])  # Ensure `id` is a string
-        del item["_id"]  # Remove MongoDB's default `_id` field
+        item["id"] = str(item["_id"])
+        del item["_id"]
+    
     return items

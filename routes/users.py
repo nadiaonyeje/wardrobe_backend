@@ -6,7 +6,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 from utils import create_access_token  # Ensure you have a JWT token generator
 
@@ -30,12 +30,15 @@ class UserLoginRequest(BaseModel):
     last_name: Optional[str] = None   # Optional for login
     username: Optional[str] = None    # Optional for login
 
-# ✅ Login/Register in one endpoint
+# ✅ Login/Register in one endpoint (Fixed Case-Insensitive Checks)
 @router.post("/token/")
 async def login_or_register(user_data: UserLoginRequest):
-    # ✅ Check if input is an email or username
-    query = {"$or": [{"email": user_data.email_or_username}, {"username": user_data.email_or_username}]}
-    existing_user = await users_collection.find_one(query)
+    email_or_username_lower = user_data.email_or_username.lower()
+
+    # ✅ Check if user exists (Case-insensitive)
+    existing_user = await users_collection.find_one({
+        "$or": [{"email": email_or_username_lower}, {"username": email_or_username_lower}]
+    })
 
     if existing_user:
         # ✅ User exists, verify password
@@ -54,17 +57,18 @@ async def login_or_register(user_data: UserLoginRequest):
             "message": "Login successful"
         }
     else:
-        # ✅ Ensure username is unique (only check if username is provided)
+        # ✅ Ensure username is unique (case-insensitive check)
         if user_data.username:
-            existing_username = await users_collection.find_one({"username": user_data.username})
+            username_lower = user_data.username.lower()
+            existing_username = await users_collection.find_one({"username": username_lower})
             if existing_username:
                 raise HTTPException(status_code=400, detail="Username already taken. Please choose another.")
 
-        # ✅ New user, register them
+        # ✅ New user, register them (Ensure case-insensitivity)
         hashed_password = pwd_context.hash(user_data.password)
         new_user = {
-            "email": user_data.email_or_username,  # Treat as email for new users
-            "username": user_data.username or user_data.email_or_username.split("@")[0],  # Default to email prefix
+            "email": email_or_username_lower,  # Store emails in lowercase
+            "username": (user_data.username or email_or_username_lower.split("@")[0]).lower(),  # Store username in lowercase
             "password": hashed_password,
             "first_name": user_data.first_name or "New",
             "last_name": user_data.last_name or "User",
@@ -73,7 +77,7 @@ async def login_or_register(user_data: UserLoginRequest):
         await users_collection.insert_one(new_user)
 
         # ✅ Generate JWT token
-        access_token = create_access_token(data={"sub": user_data.email_or_username})
+        access_token = create_access_token(data={"sub": new_user["email"]})
 
         return {
             "access_token": access_token,
@@ -84,7 +88,7 @@ async def login_or_register(user_data: UserLoginRequest):
             "message": "User registered successfully"
         }
 
-# ✅ Google OAuth Login
+# ✅ Google OAuth Login (Fixed Case Sensitivity)
 oauth = OAuth()
 oauth.register(
     name='google',
@@ -107,12 +111,14 @@ async def google_callback(request: Request):
     if not user_info.get("email"):
         raise HTTPException(status_code=400, detail="Google authentication failed")
 
-    user = await users_collection.find_one({"email": user_info["email"]})
+    email_lower = user_info["email"].lower()
+    
+    user = await users_collection.find_one({"email": email_lower})
     
     if not user:
         user = {
-            "email": user_info["email"],
-            "username": user_info["email"].split("@")[0],  # Default username
+            "email": email_lower,
+            "username": email_lower.split("@")[0],  # Default username, stored in lowercase
             "first_name": user_info.get("given_name", "New"),
             "last_name": user_info.get("family_name", "User"),
             "created_at": datetime.utcnow()
@@ -129,7 +135,7 @@ async def google_callback(request: Request):
         "username": user["username"],
     }
 
-# ✅ Apple Login
+# ✅ Apple Login (Fixed Case Sensitivity)
 @router.post("/auth/apple")
 async def apple_login(identity_token: str):
     try:
@@ -141,18 +147,20 @@ async def apple_login(identity_token: str):
         if not email:
             raise HTTPException(status_code=400, detail="Apple authentication failed")
 
-        user = await users_collection.find_one({"email": email})
+        email_lower = email.lower()
+
+        user = await users_collection.find_one({"email": email_lower})
         if not user:
             user = {
-                "email": email,
-                "username": email.split("@")[0],  # Default username
+                "email": email_lower,
+                "username": email_lower.split("@")[0],  # Default username, stored in lowercase
                 "first_name": first_name,
                 "last_name": last_name,
                 "created_at": datetime.utcnow()
             }
             await users_collection.insert_one(user)
 
-        access_token = create_access_token(data={"sub": email})
+        access_token = create_access_token(data={"sub": email_lower})
         
         return {
             "access_token": access_token,

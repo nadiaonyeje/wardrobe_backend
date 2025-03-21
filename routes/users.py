@@ -44,13 +44,14 @@ async def login_or_register(user_data: UserLoginRequest):
         access_token = create_access_token(data={"sub": existing_user["email"], "users_id": str(existing_user["_id"])})
 
         return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "users_id": str(existing_user["_id"]),
-            "first_name": existing_user.get("first_name", ""),
-            "last_name": existing_user.get("last_name", ""),
-            "username": existing_user.get("username", ""),
-            "message": "Login successful"
+    "access_token": access_token,
+    "token_type": "bearer",
+    "first_name": existing_user.get("first_name", ""),
+    "last_name": existing_user.get("last_name", ""),
+    "username": existing_user.get("username", ""),
+    "users_id": str(existing_user["_id"]),  # ✅ Use _id as users_id
+    "message": "Login successful"
+}
         }
     
     # ✅ Ensure username & email are unique (case-insensitive)

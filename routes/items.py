@@ -2,30 +2,29 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import requests
 from bs4 import BeautifulSoup
-from database import items_collection  # ✅ Using your existing collection
+from database import items_collection
 
 router = APIRouter()
 
-# ✅ Model for receiving the pasted link
+# ✅ Model for receiving pasted link
 class ItemRequest(BaseModel):
     url: str
     user_id: str  # ✅ Ensure the item is saved per user
 
-# ✅ Function to extract price more reliably
+# ✅ Extract Price Function (More Reliable)
 def extract_price(soup):
-    """Extracts price by checking multiple possible selectors."""
-    possible_price_selectors = [
+    price_selectors = [
         {"name": "meta", "attrs": {"property": "product:price:amount"}},
         {"name": "meta", "attrs": {"property": "og:price:amount"}},
         {"name": "span", "class_": "price"},
         {"name": "div", "class_": "price"},
     ]
 
-    for selector in possible_price_selectors:
+    for selector in price_selectors:
         tag = soup.find(selector["name"], selector.get("attrs", {}))
         if tag and tag.get("content"):  # Check meta tags
             return tag["content"]
-        elif tag and tag.text.strip():  # Check regular tags
+        elif tag and tag.text.strip():  # Check normal HTML elements
             return tag.text.strip()
 
     return "Unknown Price"
@@ -40,18 +39,23 @@ async def save_item(item: ItemRequest):
         response = requests.get(url, headers=headers)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # ✅ Extract product details (more robust extraction)
+        # ✅ Extract product details
         title = soup.find("title").text if soup.find("title") else "Unknown Product"
-        price = extract_price(soup)  # ✅ More reliable price extraction
+        price = extract_price(soup)
         image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
+
+        # ✅ Check if the item is already saved for this user
+        existing_item = await items_collection.find_one({"source": url, "user_id": item.user_id})
+        if existing_item:
+            raise HTTPException(status_code=400, detail="Item already saved.")
 
         # ✅ Save item to database with user_id
         item_data = {
-            "user_id": item.user_id,  # ✅ Store user_id for per-user items
+            "user_id": item.user_id,
             "title": title,
             "price": price,
             "image_url": image,
-            "source": url  # Storing the original source link
+            "source": url
         }
         saved_item = await items_collection.insert_one(item_data)
         item_data["id"] = str(saved_item.inserted_id)
@@ -60,7 +64,7 @@ async def save_item(item: ItemRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ✅ Get items filtered by user_id
+# ✅ Get saved items for a user
 @router.get("/items/{user_id}")
 async def get_items(user_id: str):
     items = await items_collection.find({"user_id": user_id}).to_list(100)

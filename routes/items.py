@@ -1,62 +1,49 @@
 from fastapi import APIRouter, HTTPException
-from database import items_collection
-from models import WardrobeItemSchema
+from pydantic import BaseModel
 import requests
 from bs4 import BeautifulSoup
+from database import items_collection  # ✅ Using your existing collection
 
 router = APIRouter()
 
-# Extract product details from a shopping website
-@router.post("/extract-item/")
-async def extract_item(url: str):
+# ✅ Model for receiving the pasted link
+class ItemRequest(BaseModel):
+    url: str
+
+# ✅ Save item from a pasted link
+@router.post("/save-item/")
+async def save_item(item: ItemRequest):
+    url = item.url
+
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
-
-        if response.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to access URL")
-
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Attempt to extract name, price, and image (Handle different site structures)
-        name = (
-            soup.find("h1").text.strip()
-            if soup.find("h1")
-            else soup.find("title").text.strip()
-            if soup.find("title")
-            else "Unknown Product"
-        )
+        # ✅ Extract product details (Modify based on the website's structure)
+        title = soup.find("title").text if soup.find("title") else "Unknown Product"
+        price = soup.find(class_="price").text if soup.find(class_="price") else "Unknown Price"
+        image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
 
-        # Look for price in common classes
-        price_classes = ["price", "product-price", "current-price", "sale-price"]
-        price = "Price Not Found"
-        for cls in price_classes:
-            price_tag = soup.find(class_=cls)
-            if price_tag:
-                price = price_tag.text.strip()
-                break
-
-        # Extract image
-        image_tag = soup.find("img")
-        image_url = (
-            image_tag["src"]
-            if image_tag and "src" in image_tag.attrs
-            else "No image found"
-        )
-
-        if not image_url.startswith("http"):
-            image_url = url + image_url  # Fix relative URLs
-
-        # Save to MongoDB
-        new_item = {
-            "name": name,
-            "image_url": image_url,
+        # ✅ Save item to database
+        item_data = {
+            "title": title,
             "price": price,
-            "link": url,
+            "image_url": image,
+            "source": url  # Storing the original source link
         }
+        saved_item = await items_collection.insert_one(item_data)
+        item_data["id"] = str(saved_item.inserted_id)
 
-        result = await items_collection.insert_one(new_item)
-        return {"message": "Item added", "id": str(result.inserted_id), **new_item}
-
+        return item_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ✅ Get all saved items
+@router.get("/items/")
+async def get_items():
+    items = await items_collection.find().to_list(100)
+    for item in items:
+        item["id"] = str(item["_id"])
+        del item["_id"]
+    return items

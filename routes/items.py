@@ -21,8 +21,7 @@ def format_price(raw_price: str) -> str:
         return f"${price}"
     elif "€" in raw_price:
         return f"€{price}"
-    else:
-        return price
+    return price
 
 def extract_price(soup):
     selectors = [
@@ -52,21 +51,17 @@ def extract_site_icon(soup, base_url):
         href = icon["href"]
         if href.startswith("http"):
             return href
-        else:
-            return base_url + href if href.startswith("/") else base_url + "/" + href
+        return base_url + href if href.startswith("/") else f"{base_url}/{href}"
 
     og_image = soup.find("meta", property="og:image")
-    if og_image and og_image.get("content"):
-        return og_image["content"]
-
-    return None
+    return og_image.get("content") if og_image else None
 
 def extract_clean_title(soup):
-    raw_title = soup.find("title").text.strip() if soup.find("title") else "Unknown Product"
-    parts = raw_title.split("|")
-    if len(parts) > 1:
-        return parts[0].strip()
-    return raw_title
+    title_tag = soup.find("title")
+    if not title_tag or not title_tag.text.strip():
+        return "Unknown Product"
+    raw_title = title_tag.text.strip()
+    return raw_title.split("|")[0].strip()
 
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
@@ -81,7 +76,8 @@ async def save_item(item: ItemRequest):
 
         title = extract_clean_title(soup)
         price = extract_price(soup)
-        image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
+        image_tag = soup.find("meta", property="og:image")
+        image = image_tag.get("content") if image_tag else ""
 
         parsed = urlparse(url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"

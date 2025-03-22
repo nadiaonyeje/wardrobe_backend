@@ -37,7 +37,7 @@ async def token_login(data: dict):
         "last_name": user.get("last_name", "")
     }
 
-# ✅ SOCIAL LOGIN (force lowercase on save)
+# ✅ SOCIAL LOGIN (Google/Apple)
 @router.post("/social-login")
 async def social_login(data: dict):
     email = data.get("email")
@@ -51,12 +51,21 @@ async def social_login(data: dict):
     email = email.lower()
     username = (username or email).lower()
 
+    # ✅ Check if user already exists by email
     existing_user = await users_collection.find_one({"email": email})
 
     if existing_user:
         user_id = str(existing_user["_id"])
         print("✅ Found existing social user:", user_id)
     else:
+        # ✅ Check for duplicate username
+        username_taken = await users_collection.find_one({"username": username})
+        if username_taken:
+            # Auto-generate a fallback unique username
+            base = username.split("@")[0] if "@" in username else username
+            suffix = str(ObjectId())[-4:]
+            username = f"{base}_{suffix}"  # Example: johndoe_a1b2
+
         new_user = {
             "email": email,
             "username": username,

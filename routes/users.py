@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException
-from models import User
 from database import users_collection
 from bson import ObjectId
 

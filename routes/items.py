@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 from database import items_collection
+from datetime import datetime
 
 router = APIRouter()
 
@@ -92,6 +93,7 @@ async def save_item(item: ItemRequest):
             "source": url,
             "site_name": parsed.netloc.replace("www.", ""),
             "site_icon_url": site_icon or ""
+            "created_at": datetime.utcnow()
         }
 
         saved_item = await items_collection.insert_one(item_data)

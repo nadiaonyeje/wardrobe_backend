@@ -121,6 +121,7 @@ async def save_item(item: ItemRequest):
         return item_data
 
     except Exception as e:
+        print(f"Error during item save: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/items/{users_id}")

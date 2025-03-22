@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 from database import items_collection
 from datetime import datetime
+from pymongo.errors import DuplicateKeyError
 
 router = APIRouter()
 
@@ -30,6 +31,7 @@ def extract_price(soup):
         {"name": "span", "class_": "price"},
         {"name": "div", "class_": "price"},
     ]
+
     for selector in selectors:
         tag = None
         if "attrs" in selector:
@@ -41,21 +43,30 @@ def extract_price(soup):
             raw_price = tag.get("content") or tag.text
             if raw_price and "menu" not in raw_price.lower():
                 return format_price(raw_price)
-    return None
 
-def extract_title(soup):
-    raw_title = soup.find("title").text.strip() if soup.find("title") else "Unknown Product"
-    clean_title = raw_title.split("|")[0].split("–")[0].strip()  # remove site name
-    return clean_title if clean_title else "Unnamed Product"
+    return None
 
 def extract_site_icon(soup, base_url):
     icon = soup.find("link", rel=lambda value: value and "icon" in value.lower())
     if icon and icon.get("href"):
         href = icon["href"]
-        return href if href.startswith("http") else base_url + href if href.startswith("/") else base_url + "/" + href
+        if href.startswith("http"):
+            return href
+        else:
+            return base_url + href if href.startswith("/") else base_url + "/" + href
 
     og_image = soup.find("meta", property="og:image")
-    return og_image["content"] if og_image and og_image.get("content") else None
+    if og_image and og_image.get("content"):
+        return og_image["content"]
+
+    return None
+
+def extract_clean_title(soup):
+    raw_title = soup.find("title").text.strip() if soup.find("title") else "Unknown Product"
+    parts = raw_title.split("|")
+    if len(parts) > 1:
+        return parts[0].strip()
+    return raw_title
 
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
@@ -63,18 +74,12 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=400, detail="User ID is required")
 
     url = item.url.strip()
-
-    # Check if item already exists
-    existing = await items_collection.find_one({"users_id": item.users_id, "source": url})
-    if existing:
-        raise HTTPException(status_code=409, detail="Item already saved.")
-
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        title = soup.find("title").text.strip() if soup.find("title") else "Unknown Product"
+        title = extract_clean_title(soup)
         price = extract_price(soup)
         image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
 
@@ -95,8 +100,18 @@ async def save_item(item: ItemRequest):
 
         saved_item = await items_collection.insert_one(item_data)
         item_data["id"] = str(saved_item.inserted_id)
-
         return item_data
+
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Item already saved.")
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/items/{users_id}")
+async def get_items(users_id: str):
+    items = await items_collection.find({"users_id": users_id}).to_list(100)
+    for item in items:
+        item["id"] = str(item["_id"])
+        del item["_id"]
+    return items

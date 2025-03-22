@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from database import items_collection
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError
+from bson import ObjectId
 
 router = APIRouter()
 
@@ -117,3 +118,10 @@ async def get_items(users_id: str):
         item["id"] = str(item["_id"])
         del item["_id"]
     return items
+
+@router.delete("/items/{item_id}")
+async def delete_item(item_id: str):
+    result = await items_collection.delete_one({"_id": ObjectId(item_id)})
+    if result.deleted_count == 1:
+        return {"message": "Item deleted"}
+    raise HTTPException(status_code=404, detail="Item not found")

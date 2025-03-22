@@ -30,6 +30,9 @@ def extract_price(soup):
         {"name": "meta", "attrs": {"property": "og:price:amount"}},
         {"name": "span", "class_": "price"},
         {"name": "div", "class_": "price"},
+        {"name": "span", "class_": "product-price"},
+        {"name": "div", "class_": "product-price"},
+        {"name": "span", "class_": "product__price"},  # possible Boohoo fallback
     ]
 
     for selector in selectors:
@@ -42,7 +45,7 @@ def extract_price(soup):
         if tag:
             raw_price = tag.get("content") or tag.text
             if raw_price and "menu" not in raw_price.lower():
-                return format_price(raw_price)
+                return format_price(raw_price.strip())
 
     return None
 
@@ -64,6 +67,18 @@ def extract_clean_title(soup):
     raw_title = title_tag.text.strip()
     return raw_title.split("|")[0].strip()
 
+def extract_product_image(soup):
+    og_image = soup.find("meta", property="og:image")
+    if og_image and og_image.get("content"):
+        return og_image["content"]
+
+    # Boohoo fallback or generic
+    fallback_img = soup.find("img", class_="product-image")
+    if fallback_img and fallback_img.get("src"):
+        return fallback_img["src"]
+
+    return ""
+
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
     if not item.users_id:
@@ -71,7 +86,7 @@ async def save_item(item: ItemRequest):
 
     url = item.url.strip()
 
-    # Pre-check to avoid duplicates if index isn't enforced yet
+    # Pre-check for duplicates if index is not active
     existing = await items_collection.find_one({"users_id": item.users_id, "source": url})
     if existing:
         raise HTTPException(status_code=409, detail="Item already saved.")
@@ -83,8 +98,7 @@ async def save_item(item: ItemRequest):
 
         title = extract_clean_title(soup)
         price = extract_price(soup)
-        image_tag = soup.find("meta", property="og:image")
-        image = image_tag.get("content") if image_tag and image_tag.get("content") else ""
+        image = extract_product_image(soup)
 
         parsed = urlparse(url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
@@ -113,7 +127,7 @@ async def save_item(item: ItemRequest):
 
 @router.get("/items/{users_id}")
 async def get_items(users_id: str):
-    cursor = items_collection.find({"users_id": users_id}).sort("created_at", -1)  # Sort newest first
+    cursor = items_collection.find({"users_id": users_id}).sort("created_at", -1)
     items = await cursor.to_list(100)
     for item in items:
         item["id"] = str(item["_id"])

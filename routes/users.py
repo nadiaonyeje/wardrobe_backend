@@ -4,7 +4,7 @@ from bson import ObjectId
 
 router = APIRouter()
 
-# ✅ EMAIL/PASSWORD LOGIN
+# ✅ EMAIL/PASSWORD LOGIN (case-insensitive)
 @router.post("/token/")
 async def token_login(data: dict):
     email_or_username = data.get("email_or_username")
@@ -15,8 +15,8 @@ async def token_login(data: dict):
 
     query = {
         "$or": [
-            {"email": email_or_username},
-            {"username": email_or_username}
+            {"email": {"$regex": f"^{email_or_username}$", "$options": "i"}},
+            {"username": {"$regex": f"^{email_or_username}$", "$options": "i"}}
         ]
     }
 
@@ -37,7 +37,7 @@ async def token_login(data: dict):
         "last_name": user.get("last_name", "")
     }
 
-# ✅ SOCIAL LOGIN (GOOGLE / APPLE)
+# ✅ SOCIAL LOGIN (force lowercase on save)
 @router.post("/social-login")
 async def social_login(data: dict):
     email = data.get("email")
@@ -48,6 +48,9 @@ async def social_login(data: dict):
     if not email:
         raise HTTPException(status_code=400, detail="Email is required for social login")
 
+    email = email.lower()
+    username = (username or email).lower()
+
     existing_user = await users_collection.find_one({"email": email})
 
     if existing_user:
@@ -56,10 +59,10 @@ async def social_login(data: dict):
     else:
         new_user = {
             "email": email,
-            "username": username or email,
+            "username": username,
             "first_name": first_name,
             "last_name": last_name,
-            "password": "",  # No password required for social login
+            "password": "",  # No password for social login
         }
         result = await users_collection.insert_one(new_user)
         user_id = str(result.inserted_id)
@@ -67,7 +70,7 @@ async def social_login(data: dict):
 
     return {
         "user_id": user_id,
-        "username": username or email,
+        "username": username,
         "first_name": first_name,
         "last_name": last_name
     }

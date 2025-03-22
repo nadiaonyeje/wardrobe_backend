@@ -7,6 +7,7 @@ from database import items_collection
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
+from playwright_scraper import fetch_rendered_html
 
 router = APIRouter()
 
@@ -86,19 +87,19 @@ async def save_item(item: ItemRequest):
 
     url = item.url.strip()
 
-    # Pre-check for duplicates if index is not active
+    # Check for existing item
     existing = await items_collection.find_one({"users_id": item.users_id, "source": url})
     if existing:
         raise HTTPException(status_code=409, detail="Item already saved.")
 
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.text, "html.parser")
+        html = await fetch_rendered_html(url)
+        soup = BeautifulSoup(html, "html.parser")
 
         title = extract_clean_title(soup)
         price = extract_price(soup)
-        image = extract_product_image(soup)
+        image_tag = soup.find("meta", property="og:image")
+        image = image_tag.get("content") if image_tag else ""
 
         parsed = urlparse(url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
@@ -118,9 +119,6 @@ async def save_item(item: ItemRequest):
         saved_item = await items_collection.insert_one(item_data)
         item_data["id"] = str(saved_item.inserted_id)
         return item_data
-
-    except DuplicateKeyError:
-        raise HTTPException(status_code=409, detail="Item already saved.")
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

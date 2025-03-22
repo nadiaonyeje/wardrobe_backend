@@ -10,6 +10,7 @@ class ItemRequest(BaseModel):
     url: str
     users_id: str  # ✅ Ensure items are saved per user
 
+# ✅ Extract price from common tag types
 def extract_price(soup):
     possible_price_selectors = [
         {"name": "meta", "attrs": {"property": "product:price:amount"}},
@@ -19,14 +20,28 @@ def extract_price(soup):
     ]
 
     for selector in possible_price_selectors:
-        tag = soup.find(selector["name"], selector.get("attrs", {}))
+        if "attrs" in selector:
+            tag = soup.find(selector["name"], attrs=selector["attrs"])
+        elif "class_" in selector:
+            tag = soup.find(selector["name"], class_=selector["class_"])
+        else:
+            continue
+
+        # ✅ Handle <meta content="">
         if tag and tag.get("content"):
-            return tag["content"]
-        elif tag and tag.text.strip():
-            return tag.text.strip()
+            price = tag["content"].strip()
+        elif tag and tag.text:
+            price = tag.text.strip()
+        else:
+            continue
 
-    return "Unknown Price"
+        # ✅ Skip garbage or menu text
+        if price and "menu" not in price.lower():
+            return price
 
+    return None  # ❌ No valid price found
+
+# ✅ Save item with price/image/title
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
     if not item.users_id:
@@ -39,23 +54,26 @@ async def save_item(item: ItemRequest):
         soup = BeautifulSoup(response.text, "html.parser")
 
         title = soup.find("title").text.strip() if soup.find("title") else "Unknown Product"
-        price = extract_price(soup)
+        price = extract_price(soup) or "Unknown Price"
         image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
 
         item_data = {
-            "users_id": item.users_id,  
+            "users_id": item.users_id,
             "title": title,
             "price": price,
             "image_url": image,
             "source": url
         }
+
         saved_item = await items_collection.insert_one(item_data)
         item_data["id"] = str(saved_item.inserted_id)
 
         return item_data
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ✅ Fetch saved items by user
 @router.get("/items/{users_id}")
 async def get_items(users_id: str):
     items = await items_collection.find({"users_id": users_id}).to_list(100)

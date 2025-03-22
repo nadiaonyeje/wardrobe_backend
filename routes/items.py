@@ -92,7 +92,7 @@ async def save_item(item: ItemRequest):
             "image_url": image,
             "source": url,
             "site_name": parsed.netloc.replace("www.", ""),
-            "site_icon_url": site_icon or ""
+            "site_icon_url": site_icon or "",
             "created_at": datetime.utcnow(),
         }
 

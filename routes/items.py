@@ -6,7 +6,7 @@ from database import items_collection
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
-from utils.playwright_scraper import fetch_rendered_html  # <-- use new Playwright function
+from playwright_scraper import fetch_rendered_html  # <-- use new Playwright function
 
 router = APIRouter()
 

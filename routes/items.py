@@ -6,7 +6,7 @@ from database import items_collection
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
-from playwright_scraper import fetch_rendered_html  # <-- use new Playwright function
+from playwright_scraper import fetch_rendered_html  # <-- uses Playwright for rendering
 
 router = APIRouter()
 
@@ -31,6 +31,7 @@ def extract_price(soup):
         {"name": "span", "class_": "price"},
         {"name": "div", "class_": "price"},
         {"name": "span", "class_": "current-price"},
+        {"name": "span", "class_": "product-price"},  # Optional: Add more
     ]
     for selector in selectors:
         tag = None
@@ -69,6 +70,7 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=409, detail="Item already saved.")
 
     try:
+        # Use Playwright to fetch rendered HTML
         html = await fetch_rendered_html(url)
         soup = BeautifulSoup(html, "html.parser")
 
@@ -98,7 +100,9 @@ async def save_item(item: ItemRequest):
 
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Item already saved.")
+    
     except Exception as e:
+        print(f"Error during item save: {str(e)}")  # Logs error for debugging
         raise HTTPException(status_code=500, detail=f"Error scraping item: {str(e)}")
 
 @router.get("/items/{users_id}")

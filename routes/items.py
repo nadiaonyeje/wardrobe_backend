@@ -2,15 +2,30 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import requests
 from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 from database import items_collection
 
 router = APIRouter()
 
 class ItemRequest(BaseModel):
     url: str
-    users_id: str  # ✅ Ensure items are saved per user
+    users_id: str
 
-# ✅ Extract price from common tag types
+# ✅ Try to clean up and format price
+def format_price(raw_price: str) -> str:
+    price = raw_price.replace("£", "").replace("$", "").replace("€", "").strip()
+
+    # Auto-detect currency symbol if included in original string
+    if "£" in raw_price:
+        return f"£{price}"
+    elif "$" in raw_price:
+        return f"${price}"
+    elif "€" in raw_price:
+        return f"€{price}"
+    else:
+        return price
+
+# ✅ Extract a valid price
 def extract_price(soup):
     possible_price_selectors = [
         {"name": "meta", "attrs": {"property": "product:price:amount"}},
@@ -20,28 +35,35 @@ def extract_price(soup):
     ]
 
     for selector in possible_price_selectors:
+        tag = None
         if "attrs" in selector:
             tag = soup.find(selector["name"], attrs=selector["attrs"])
         elif "class_" in selector:
             tag = soup.find(selector["name"], class_=selector["class_"])
+
+        if tag:
+            raw_price = tag.get("content") or tag.text
+            if raw_price and "menu" not in raw_price.lower():
+                return format_price(raw_price)
+
+    return None  # ✅ No valid price found
+
+# ✅ Try to grab a favicon or og:icon/logo
+def extract_site_icon(soup, base_url):
+    icon = soup.find("link", rel=lambda value: value and "icon" in value.lower())
+    if icon and icon.get("href"):
+        href = icon["href"]
+        if href.startswith("http"):
+            return href
         else:
-            continue
+            return base_url + href if href.startswith("/") else base_url + "/" + href
 
-        # ✅ Handle <meta content="">
-        if tag and tag.get("content"):
-            price = tag["content"].strip()
-        elif tag and tag.text:
-            price = tag.text.strip()
-        else:
-            continue
+    og_image = soup.find("meta", property="og:image")
+    if og_image and og_image.get("content"):
+        return og_image["content"]
 
-        # ✅ Skip garbage or menu text
-        if price and "menu" not in price.lower():
-            return price
+    return None
 
-    return None  # ❌ No valid price found
-
-# ✅ Save item with price/image/title
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
     if not item.users_id:
@@ -54,15 +76,22 @@ async def save_item(item: ItemRequest):
         soup = BeautifulSoup(response.text, "html.parser")
 
         title = soup.find("title").text.strip() if soup.find("title") else "Unknown Product"
-        price = extract_price(soup) or "Unknown Price"
+        price = extract_price(soup)
         image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
+        
+        # ✅ Site base URL and icon
+        parsed = urlparse(url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+        site_icon = extract_site_icon(soup, base_url)
 
         item_data = {
             "users_id": item.users_id,
             "title": title,
-            "price": price,
+            "price": price or None,
             "image_url": image,
-            "source": url
+            "source": url,
+            "site_name": parsed.netloc.replace("www.", ""),
+            "site_icon_url": site_icon or ""
         }
 
         saved_item = await items_collection.insert_one(item_data)
@@ -73,7 +102,6 @@ async def save_item(item: ItemRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ✅ Fetch saved items by user
 @router.get("/items/{users_id}")
 async def get_items(users_id: str):
     items = await items_collection.find({"users_id": users_id}).to_list(100)

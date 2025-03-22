@@ -15,4 +15,3 @@ starlette
 bcrypt==4.0.1
 httpx
 itsdangerous
-urllib.parse

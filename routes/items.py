@@ -113,7 +113,8 @@ async def save_item(item: ItemRequest):
 
 @router.get("/items/{users_id}")
 async def get_items(users_id: str):
-    items = await items_collection.find({"users_id": users_id}).to_list(100)
+    cursor = items_collection.find({"users_id": users_id}).sort("created_at", -1)  # Sort newest first
+    items = await cursor.to_list(100)
     for item in items:
         item["id"] = str(item["_id"])
         del item["_id"]

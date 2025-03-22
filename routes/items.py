@@ -1,13 +1,12 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-import requests
-from bs4 import BeautifulSoup
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
 from database import items_collection
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
-from playwright_scraper import fetch_rendered_html
+from utils.playwright_scraper import fetch_rendered_html  # <-- use new Playwright function
 
 router = APIRouter()
 
@@ -31,33 +30,25 @@ def extract_price(soup):
         {"name": "meta", "attrs": {"property": "og:price:amount"}},
         {"name": "span", "class_": "price"},
         {"name": "div", "class_": "price"},
-        {"name": "span", "class_": "product-price"},
-        {"name": "div", "class_": "product-price"},
-        {"name": "span", "class_": "product__price"},  # possible Boohoo fallback
+        {"name": "span", "class_": "current-price"},
     ]
-
     for selector in selectors:
         tag = None
         if "attrs" in selector:
             tag = soup.find(selector["name"], attrs=selector["attrs"])
         elif "class_" in selector:
             tag = soup.find(selector["name"], class_=selector["class_"])
-
         if tag:
             raw_price = tag.get("content") or tag.text
             if raw_price and "menu" not in raw_price.lower():
-                return format_price(raw_price.strip())
-
+                return format_price(raw_price)
     return None
 
 def extract_site_icon(soup, base_url):
-    icon = soup.find("link", rel=lambda value: value and "icon" in value.lower())
+    icon = soup.find("link", rel=lambda val: val and "icon" in val.lower())
     if icon and icon.get("href"):
         href = icon["href"]
-        if href.startswith("http"):
-            return href
-        return base_url + href if href.startswith("/") else f"{base_url}/{href}"
-
+        return href if href.startswith("http") else base_url + href if href.startswith("/") else f"{base_url}/{href}"
     og_image = soup.find("meta", property="og:image")
     return og_image.get("content") if og_image and og_image.get("content") else None
 
@@ -65,20 +56,7 @@ def extract_clean_title(soup):
     title_tag = soup.find("title")
     if not title_tag or not title_tag.text.strip():
         return "Unknown Product"
-    raw_title = title_tag.text.strip()
-    return raw_title.split("|")[0].strip()
-
-def extract_product_image(soup):
-    og_image = soup.find("meta", property="og:image")
-    if og_image and og_image.get("content"):
-        return og_image["content"]
-
-    # Boohoo fallback or generic
-    fallback_img = soup.find("img", class_="product-image")
-    if fallback_img and fallback_img.get("src"):
-        return fallback_img["src"]
-
-    return ""
+    return title_tag.text.strip().split("|")[0].strip()
 
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
@@ -86,8 +64,6 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=400, detail="User ID is required")
 
     url = item.url.strip()
-
-    # Check for existing item
     existing = await items_collection.find_one({"users_id": item.users_id, "source": url})
     if existing:
         raise HTTPException(status_code=409, detail="Item already saved.")
@@ -99,7 +75,7 @@ async def save_item(item: ItemRequest):
         title = extract_clean_title(soup)
         price = extract_price(soup)
         image_tag = soup.find("meta", property="og:image")
-        image = image_tag.get("content") if image_tag else ""
+        image = image_tag.get("content") if image_tag and image_tag.get("content") else ""
 
         parsed = urlparse(url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
@@ -120,9 +96,10 @@ async def save_item(item: ItemRequest):
         item_data["id"] = str(saved_item.inserted_id)
         return item_data
 
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Item already saved.")
     except Exception as e:
-        print(f"Error during item save: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error scraping item: {str(e)}")
 
 @router.get("/items/{users_id}")
 async def get_items(users_id: str):

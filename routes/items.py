@@ -63,25 +63,30 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=400, detail="User ID is required")
 
     url = item.url.strip()
+
+    # Check if item already exists
+    existing = await items_collection.find_one({"users_id": item.users_id, "source": url})
+    if existing:
+        raise HTTPException(status_code=409, detail="Item already saved.")
+
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers)
         soup = BeautifulSoup(response.text, "html.parser")
+
+        title = soup.find("title").text.strip() if soup.find("title") else "Unknown Product"
+        price = extract_price(soup)
+        image = soup.find("meta", property="og:image")["content"] if soup.find("meta", property="og:image") else ""
 
         parsed = urlparse(url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
         site_icon = extract_site_icon(soup, base_url)
 
-        title = extract_title(soup)
-        price = extract_price(soup)
-        image = soup.find("meta", property="og:image")
-        image_url = image["content"] if image else ""
-
         item_data = {
             "users_id": item.users_id,
             "title": title,
             "price": price or None,
-            "image_url": image_url,
+            "image_url": image,
             "source": url,
             "site_name": parsed.netloc.replace("www.", ""),
             "site_icon_url": site_icon or "",
@@ -90,6 +95,7 @@ async def save_item(item: ItemRequest):
 
         saved_item = await items_collection.insert_one(item_data)
         item_data["id"] = str(saved_item.inserted_id)
+
         return item_data
 
     except Exception as e:

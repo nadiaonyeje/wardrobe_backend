@@ -54,7 +54,7 @@ def extract_site_icon(soup, base_url):
         return base_url + href if href.startswith("/") else f"{base_url}/{href}"
 
     og_image = soup.find("meta", property="og:image")
-    return og_image.get("content") if og_image else None
+    return og_image.get("content") if og_image and og_image.get("content") else None
 
 def extract_clean_title(soup):
     title_tag = soup.find("title")
@@ -69,6 +69,12 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=400, detail="User ID is required")
 
     url = item.url.strip()
+
+    # Pre-check to avoid duplicates if index isn't enforced yet
+    existing = await items_collection.find_one({"users_id": item.users_id, "source": url})
+    if existing:
+        raise HTTPException(status_code=409, detail="Item already saved.")
+
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
@@ -77,7 +83,7 @@ async def save_item(item: ItemRequest):
         title = extract_clean_title(soup)
         price = extract_price(soup)
         image_tag = soup.find("meta", property="og:image")
-        image = image_tag.get("content") if image_tag else ""
+        image = image_tag.get("content") if image_tag and image_tag.get("content") else ""
 
         parsed = urlparse(url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"

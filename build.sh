@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-echo "Installing Playwright browsers..."
-playwright install --with-deps
+echo "Installing Playwright Chromium only..."
+npx playwright install chromium

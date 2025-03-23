@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-echo "Installing Playwright Chromium only..."
+export PLAYWRIGHT_BROWSERS_PATH=0
 npx playwright install chromium

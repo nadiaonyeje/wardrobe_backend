@@ -15,4 +15,4 @@ starlette
 bcrypt==4.0.1
 httpx
 itsdangerous
-playwright
+playwright==1.42.0

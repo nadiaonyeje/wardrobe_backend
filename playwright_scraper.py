@@ -19,7 +19,16 @@ async def fetch_rendered_html(url: str) -> str:
                 ]
             )
             page = await browser.new_page()
-            await page.goto(url, timeout=30000)
+
+            # Block non-essential resources (images, stylesheets, fonts)
+            await page.route(
+                "**/*",
+                lambda route: route.abort()
+                if route.request.resource_type in ["image", "stylesheet", "font"]
+                else route.continue_()
+            )
+
+            await page.goto(url, timeout=60000, wait_until="domcontentloaded")
             content = await page.content()
             await browser.close()
             return content

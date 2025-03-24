@@ -96,9 +96,9 @@ async def save_item(item: ItemRequest):
         saved_item = await items_collection.insert_one(item_data)
 
         return {
-            "id": str(saved_item.inserted_id),
-            **item_data,
-        }
+    **item_data,
+    "id": str(saved_item.inserted_id),
+}
 
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Item already saved.")

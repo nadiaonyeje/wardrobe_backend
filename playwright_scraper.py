@@ -4,7 +4,7 @@ from playwright.async_api import async_playwright
 
 # Correct path to where Chromium is installed by Playwright on Render
 CHROME_PATH = Path(
-    "opt/render/project/src/.venv/lib/python3.11/site-packages/playwright/driver/package/.local-browsers/chromium-1105/chrome-linux/chrome"
+    "/opt/render/project/src/.venv/lib/python3.11/site-packages/playwright/driver/package/.local-browsers/chromium-1105/chrome-linux/chrome"
 )
 
 async def fetch_rendered_html(url: str) -> str:

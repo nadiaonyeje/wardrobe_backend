@@ -8,7 +8,7 @@ from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 import requests
 
-from playwright_scraper import fetch_rendered_html  # fallback method
+from utils.playwright_scraper import fetch_rendered_html  # fallback method
 
 router = APIRouter()
 

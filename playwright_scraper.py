@@ -1,22 +1,20 @@
 from playwright.async_api import async_playwright
-from pathlib import Path
 
-# Playwright puts Chromium here when PLAYWRIGHT_BROWSERS_PATH=0
-CHROME_PATH = Path(".") / ".playwright" / "chromium-1105" / "chrome-linux" / "chrome"
+CHROME_PATH = "/opt/render/project/src/.venv/lib/python3.11/site-packages/playwright/driver/package/.local-browsers/chromium-1105/chrome-linux/chrome"
 
 async def fetch_rendered_html(url: str) -> str:
     try:
         print(f"[Playwright] Launching browser for: {url}")
-        print(f"[Playwright] Using executable: {CHROME_PATH.resolve()}")
+        print(f"[Playwright] Using executable: {CHROME_PATH}")
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
-                executable_path=str(CHROME_PATH.resolve()),
+                executable_path=CHROME_PATH,
                 args=[
                     "--no-sandbox",
-                    "--disable-http2",                      # << Block HTTP/2 fallback
-                    "--disable-features=NetworkService",     # << Fix HTTP protocol issues
+                    "--disable-http2",
+                    "--disable-features=NetworkService",
                     "--disable-extensions",
                 ]
             )

@@ -111,9 +111,9 @@ async def save_item(item: ItemRequest):
         }
 
         saved_item = await items_collection.insert_one(item_data)
-item_data["id"] = str(saved_item.inserted_id)
-item_data.pop("_id", None)  # Prevent ObjectId serialization error
-return item_data
+        item_data["id"] = str(saved_item.inserted_id)
+        item_data.pop("_id", None)  # Prevent ObjectId serialization error
+        return item_data
 
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Item already saved.")

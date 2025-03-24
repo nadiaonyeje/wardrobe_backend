@@ -8,7 +8,7 @@ from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 import requests
 
-from utils.playwright_scraper import fetch_rendered_html  # fallback method
+# from utils.playwright_scraper import fetch_rendered_html  # Fallback (currently disabled)
 
 router = APIRouter()
 
@@ -26,18 +26,21 @@ def format_price(raw_price: str) -> str:
         return f"€{price}"
     return price
 
-def extract_price(soup):
-    selectors = [
+def extract_price_dynamically(soup):
+    possible_tags = [
         {"name": "meta", "attrs": {"property": "product:price:amount"}},
         {"name": "meta", "attrs": {"property": "og:price:amount"}},
         {"name": "span", "class_": "price"},
         {"name": "div", "class_": "price"},
         {"name": "span", "class_": "current-price"},
         {"name": "span", "class_": "product-price"},
+        {"name": "span", "class_": "price__current"},
+        {"name": "p", "class_": "product-price"},
     ]
-    for selector in selectors:
-        tag = soup.find(selector["name"], attrs=selector.get("attrs")) if "attrs" in selector else \
-              soup.find(selector["name"], class_=selector.get("class_"))
+    for tag_config in possible_tags:
+        tag = soup.find(tag_config["name"], attrs=tag_config.get("attrs")) if "attrs" in tag_config \
+            else soup.find(tag_config["name"], class_=tag_config.get("class_"))
+
         if tag:
             raw_price = tag.get("content") or tag.text
             if raw_price and "menu" not in raw_price.lower():
@@ -56,26 +59,16 @@ def extract_clean_title(soup):
     title_tag = soup.find("title")
     return title_tag.text.strip().split("|")[0].strip() if title_tag and title_tag.text else "Unknown Product"
 
-async def parse_with_fallback(url):
+async def parse_product(url: str):
     headers = {"User-Agent": "Mozilla/5.0"}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, "html.parser")
-    except Exception:
-        soup = None
+    response = requests.get(url, headers=headers, timeout=10)
+    soup = BeautifulSoup(response.text, "html.parser")
 
-    # Fallback to Playwright if soup is None or missing key data
-    def is_valid(s): return s and s.strip() and s != "Unknown Product"
     parsed = urlparse(url)
     base_url = f"{parsed.scheme}://{parsed.netloc}"
 
-    if not soup or not soup.find("meta", property="og:image"):
-        html = await fetch_rendered_html(url)
-        soup = BeautifulSoup(html, "html.parser")
-
     title = extract_clean_title(soup)
-    price = extract_price(soup)
+    price = extract_price_dynamically(soup)
     image_tag = soup.find("meta", property="og:image")
     image_url = image_tag.get("content") if image_tag else ""
     site_icon = extract_site_icon(soup, base_url)
@@ -99,10 +92,7 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=409, detail="Item already saved.")
 
     try:
-        parsed = urlparse(url)
-        base_url = f"{parsed.scheme}://{parsed.netloc}"
-        scraped = await parse_with_fallback(url)
-
+        scraped = await parse_product(url)
         item_data = {
             "users_id": item.users_id,
             "source": url,
@@ -112,12 +102,11 @@ async def save_item(item: ItemRequest):
 
         saved_item = await items_collection.insert_one(item_data)
         item_data["id"] = str(saved_item.inserted_id)
-        item_data.pop("_id", None)  # Prevent ObjectId serialization error
+        item_data.pop("_id", None)
         return item_data
 
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Item already saved.")
-
     except Exception as e:
         print(f"Error during item save: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error scraping item: {str(e)}")

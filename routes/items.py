@@ -6,7 +6,9 @@ from database import items_collection
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
-from playwright_scraper import fetch_rendered_html  # <-- uses Playwright for rendering
+import requests
+
+from playwright_scraper import fetch_rendered_html  # fallback method
 
 router = APIRouter()
 
@@ -34,11 +36,8 @@ def extract_price(soup):
         {"name": "span", "class_": "product-price"},
     ]
     for selector in selectors:
-        tag = None
-        if "attrs" in selector:
-            tag = soup.find(selector["name"], attrs=selector["attrs"])
-        elif "class_" in selector:
-            tag = soup.find(selector["name"], class_=selector["class_"])
+        tag = soup.find(selector["name"], attrs=selector.get("attrs")) if "attrs" in selector else \
+              soup.find(selector["name"], class_=selector.get("class_"))
         if tag:
             raw_price = tag.get("content") or tag.text
             if raw_price and "menu" not in raw_price.lower():
@@ -51,13 +50,43 @@ def extract_site_icon(soup, base_url):
         href = icon["href"]
         return href if href.startswith("http") else base_url + href if href.startswith("/") else f"{base_url}/{href}"
     og_image = soup.find("meta", property="og:image")
-    return og_image.get("content") if og_image and og_image.get("content") else None
+    return og_image.get("content") if og_image else None
 
 def extract_clean_title(soup):
     title_tag = soup.find("title")
-    if not title_tag or not title_tag.text.strip():
-        return "Unknown Product"
-    return title_tag.text.strip().split("|")[0].strip()
+    return title_tag.text.strip().split("|")[0].strip() if title_tag and title_tag.text else "Unknown Product"
+
+async def parse_with_fallback(url):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, "html.parser")
+    except Exception:
+        soup = None
+
+    # Fallback to Playwright if soup is None or missing key data
+    def is_valid(s): return s and s.strip() and s != "Unknown Product"
+    parsed = urlparse(url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+
+    if not soup or not soup.find("meta", property="og:image"):
+        html = await fetch_rendered_html(url)
+        soup = BeautifulSoup(html, "html.parser")
+
+    title = extract_clean_title(soup)
+    price = extract_price(soup)
+    image_tag = soup.find("meta", property="og:image")
+    image_url = image_tag.get("content") if image_tag else ""
+    site_icon = extract_site_icon(soup, base_url)
+
+    return {
+        "title": title,
+        "price": price or None,
+        "image_url": image_url,
+        "site_icon_url": site_icon or "",
+        "site_name": parsed.netloc.replace("www.", ""),
+    }
 
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
@@ -70,35 +99,20 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=409, detail="Item already saved.")
 
     try:
-        html = await fetch_rendered_html(url)
-        soup = BeautifulSoup(html, "html.parser")
-
-        title = extract_clean_title(soup)
-        price = extract_price(soup)
-        image_tag = soup.find("meta", property="og:image")
-        image = image_tag.get("content") if image_tag and image_tag.get("content") else ""
-
         parsed = urlparse(url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
-        site_icon = extract_site_icon(soup, base_url)
+        scraped = await parse_with_fallback(url)
 
         item_data = {
             "users_id": item.users_id,
-            "title": title,
-            "price": price or None,
-            "image_url": image,
             "source": url,
-            "site_name": parsed.netloc.replace("www.", ""),
-            "site_icon_url": site_icon or "",
             "created_at": datetime.utcnow(),
+            **scraped
         }
 
         saved_item = await items_collection.insert_one(item_data)
-
-        return {
-    **item_data,
-    "id": str(saved_item.inserted_id),
-}
+        item_data["id"] = str(saved_item.inserted_id)
+        return item_data
 
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Item already saved.")

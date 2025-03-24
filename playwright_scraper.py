@@ -2,9 +2,10 @@ import os
 from pathlib import Path
 from playwright.async_api import async_playwright
 
-# Construct local path where browser is installed (after build.sh runs `npx playwright install`)
-BASE_DIR = Path(__file__).resolve().parent
-CHROME_PATH = BASE_DIR / "ms-playwright" / "chromium-1105" / "chrome-linux" / "chrome"
+# Correct path to where Chromium is installed by Playwright on Render
+CHROME_PATH = Path(
+    "/opt/render/project/src/.venv/lib/python3.11/site-packages/playwright/driver/package/.local-browsers/chromium-1105/chrome-linux/chrome"
+)
 
 async def fetch_rendered_html(url: str) -> str:
     try:
@@ -14,8 +15,8 @@ async def fetch_rendered_html(url: str) -> str:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
-                executable_path=str(CHROME_PATH),  # Force path so it works in Render
-                args=["--no-sandbox"]              # Important for restricted envs
+                executable_path=str(CHROME_PATH),
+                args=["--no-sandbox"]
             )
             page = await browser.new_page()
             await page.goto(url, timeout=20000)

@@ -1,8 +1,8 @@
 # utils/scraper.py
 from bs4 import BeautifulSoup
 import requests
-from playwright.async_api import async_playwright
 from urllib.parse import urlparse
+from playwright.async_api import async_playwright
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 
@@ -12,37 +12,36 @@ class DynamicScraper:
         self.headers = {"User-Agent": USER_AGENT}
         self.base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
 
-    def resolve_url(href: str, base_url: str):
-    if not href:
-        return ""
-    if href.startswith("http"):
-        return href
-    if href.startswith("//"):
-        return "https:" + href
-    if href.startswith("/"):
-        return base_url + href
-    return f"{base_url}/{href}"
+    def resolve_url(self, href: str) -> str:
+        if not href:
+            return ""
+        if href.startswith("http"):
+            return href
+        if href.startswith("//"):
+            return "https:" + href
+        if href.startswith("/"):
+            return self.base_url + href
+        return f"{self.base_url}/{href}"
 
-    def format_price(raw_price: str, currency: str = "") -> str:
-    if not raw_price:
-        return None
+    def format_price(self, raw_price: str, currency: str = "") -> str:
+        if not raw_price:
+            return None
 
-    price = raw_price.replace(",", "").strip()
-    
-    try:
-        numeric_price = float(price)
-        formatted_price = f"{numeric_price:.2f}"
-        if formatted_price.endswith(".00"):
-            formatted_price = str(int(numeric_price))
-    except ValueError:
-        return raw_price
+        price = raw_price.replace(",", "").strip()
 
-    currency_symbols = {
-        "GBP": "£", "USD": "$", "EUR": "€"
-    }
+        try:
+            numeric_price = float(price)
+            formatted_price = f"{numeric_price:.2f}"
+            if formatted_price.endswith(".00"):
+                formatted_price = str(int(numeric_price))
+        except ValueError:
+            return raw_price
 
-    symbol = currency_symbols.get(currency.upper(), "")
-    return f"{symbol}{formatted_price}"
+        currency_symbols = {
+            "GBP": "£", "USD": "$", "EUR": "€"
+        }
+        symbol = currency_symbols.get(currency.upper(), "")
+        return f"{symbol}{formatted_price}"
 
     def _extract_price(self, soup):
         selectors = [
@@ -64,12 +63,12 @@ class DynamicScraper:
                 if raw_price and "menu" not in raw_price.lower():
                     currency_tag = soup.find("meta", attrs={"property": "product:price:currency"})
                     currency = currency_tag.get("content") if currency_tag else ""
-                    return format_price(raw_price, currency)
+                    return self.format_price(raw_price, currency)
         return None
 
     def _extract_image(self, soup):
         og_image = soup.find("meta", property="og:image")
-        return og_image["content"] if og_image and og_image.get("content") else ""
+        return self.resolve_url(og_image["content"]) if og_image and og_image.get("content") else ""
 
     def _extract_title(self, soup):
         title = soup.find("title")
@@ -78,9 +77,17 @@ class DynamicScraper:
     def _extract_site_icon(self, soup):
         icon = soup.find("link", rel=lambda val: val and "icon" in val.lower())
         if icon and icon.get("href"):
-            href = icon["href"]
-            return href if href.startswith("http") else self.base_url + href
+            return self.resolve_url(icon["href"])
         return self._extract_image(soup)
+
+    def _scrape_data(self, soup):
+        return {
+            "title": self._extract_title(soup),
+            "price": self._extract_price(soup),
+            "image_url": self._extract_image(soup),
+            "site_icon_url": self._extract_site_icon(soup),
+            "site_name": urlparse(self.url).netloc.replace("www.", "")
+        }
 
     def scrape_with_bs(self):
         try:
@@ -103,11 +110,3 @@ class DynamicScraper:
         except Exception as e:
             print("[Playwright Fallback Error]", e)
             return None
-
-    def _scrape_data(self, soup):
-        return {
-            "title": self._extract_title(soup),
-            "price": self._extract_price(soup),
-            image_url = resolve_url(image_tag.get("content"), base_url) if image_tag else ""
-            site_icon = resolve_url(icon["href"], base_url) if icon and icon.get("href") else ""
-        }

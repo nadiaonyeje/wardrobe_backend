@@ -3,6 +3,8 @@ from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urlparse
 from playwright.async_api import async_playwright
+import json 
+import re
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 
@@ -43,7 +45,10 @@ class DynamicScraper:
         symbol = currency_symbols.get(currency.upper(), "")
         return f"{symbol}{formatted_price}"
 
+
+
     def _extract_price(self, soup):
+    # Step 1: Try regular selectors
         selectors = [
             {"name": "meta", "attrs": {"property": "product:price:amount"}},
             {"name": "meta", "attrs": {"property": "og:price:amount"}},
@@ -64,6 +69,21 @@ class DynamicScraper:
                     currency_tag = soup.find("meta", attrs={"property": "product:price:currency"})
                     currency = currency_tag.get("content") if currency_tag else ""
                     return self.format_price(raw_price, currency)
+    
+        # Step 2: Try JSON-LD (for PLT and similar sites)
+        ld_json = soup.find("script", type="application/ld+json")
+        if ld_json:
+            try:
+                data = json.loads(ld_json.string)
+                if isinstance(data, list):  # handle case of array of objects
+                    data = data[0]
+                offers = data.get("offers", {})
+                price = offers.get("price")
+                currency = offers.get("priceCurrency", "")
+                return self.format_price(price, currency)
+            except Exception as e:
+                print("[LD+JSON price parse error]", e)
+    
         return None
 
     def _extract_image(self, soup):

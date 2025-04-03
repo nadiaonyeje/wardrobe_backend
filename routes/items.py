@@ -3,10 +3,11 @@ from pydantic import BaseModel
 from database import items_collection
 from datetime import datetime
 from bson import ObjectId
-from utils.scraper_pipeline import scrape_product_data  # <- Final scraper pipeline
+from utils.scraper_pipeline import scrape_product_data  # Final scraper
 
 router = APIRouter()
-    
+
+# Request models
 class ItemRequest(BaseModel):
     url: str
     users_id: str
@@ -14,6 +15,13 @@ class ItemRequest(BaseModel):
     category: str = None
     subcategory: str = None
 
+class MetadataRequest(BaseModel):
+    item_id: str
+    ownership: str
+    category: str
+    subcategory: str
+
+# Save item route
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
     if not item.users_id:
@@ -28,9 +36,7 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=409, detail="Item already saved.")
 
     try:
-        # Scrape using final scraper pipeline
         scraped = await scrape_product_data(url)
-
         item_data = {
             "users_id": item.users_id,
             "source": url,
@@ -38,19 +44,40 @@ async def save_item(item: ItemRequest):
             "category": item.category,
             "subcategory": item.subcategory,
             "created_at": datetime.utcnow(),
-            **scraped  # title, price, image_url, site_icon_url, site_name
+            **scraped
         }
-        
         saved_item = await items_collection.insert_one(item_data)
         item_data["id"] = str(saved_item.inserted_id)
-        item_data.pop("_id", None)  # Remove MongoDB's ObjectId if it gets included
-
+        item_data.pop("_id", None)
         return item_data
 
     except Exception as e:
-        print(f"Error during item save: {e}")
+        print(f"[Save Error] {e}")
         raise HTTPException(status_code=500, detail=f"Error scraping item: {e}")
 
+# Assign metadata to an existing item
+@router.post("/items/assign-metadata")
+async def assign_metadata(meta: MetadataRequest):
+    try:
+        result = await items_collection.update_one(
+            {"_id": ObjectId(meta.item_id)},
+            {
+                "$set": {
+                    "ownership": meta.ownership,
+                    "category": meta.category,
+                    "subcategory": meta.subcategory
+                }
+            }
+        )
+        if result.modified_count == 1:
+            return {"message": "Metadata saved"}
+        else:
+            raise HTTPException(status_code=404, detail="Item not found")
+    except Exception as e:
+        print(f"[Metadata Error] {e}")
+        raise HTTPException(status_code=500, detail="Failed to assign metadata")
+
+# Get items for a user
 @router.get("/items/{users_id}")
 async def get_items(users_id: str):
     cursor = items_collection.find({"users_id": users_id}).sort("created_at", -1)
@@ -60,6 +87,7 @@ async def get_items(users_id: str):
         del item["_id"]
     return items
 
+# Delete item
 @router.delete("/items/{item_id}")
 async def delete_item(item_id: str):
     result = await items_collection.delete_one({"_id": ObjectId(item_id)})

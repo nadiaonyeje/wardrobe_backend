@@ -6,7 +6,7 @@ from datetime import datetime
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 
-from utils.scraper_pipeline import scrape_data_pipeline  # <- New dynamic scraper
+from utils.scraper_pipeline import scrape_product_data # <- New dynamic scraper
 
 router = APIRouter()
 
@@ -25,7 +25,7 @@ async def save_item(item: ItemRequest):
         raise HTTPException(status_code=409, detail="Item already saved.")
 
     try:
-        scraped = await scrape_data_pipeline(url)
+        scraped = await scrape_product_data(url)
 
         item_data = {
             "users_id": item.users_id,

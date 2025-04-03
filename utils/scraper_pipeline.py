@@ -1,36 +1,31 @@
 # utils/scraper_pipeline.py
 
 from utils.scraper import DynamicScraper
+from utils.playwright_scraper import fetch_rendered_html
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 
-async def scrape_data_pipeline(url: str) -> dict:
-    """
-    Attempt to scrape data from the given URL using BeautifulSoup first.
-    If that fails or key data is missing, fallback to Playwright.
-
-    :param url: Product page URL to scrape
-    :return: Dictionary with scraped product data (title, price, image_url, site_icon_url, site_name)
-    """
+async def scrape_product_data(url: str) -> dict:
     scraper = DynamicScraper(url)
+    
+    # First try: BeautifulSoup
+    result = scraper.scrape_with_bs()
+    
+    # Fallback: Playwright only if price is None or missing key fields
+    if not result or not result.get("price"):
+        print("[Fallback] Switching to Playwright...")
+        try:
+            html = await fetch_rendered_html(url)
+            soup = BeautifulSoup(html, "html.parser")
+            result = {
+                "title": scraper._extract_title(soup),
+                "price": scraper._extract_json_ld_price(soup) or scraper._extract_meta_price(soup),
+                "image_url": scraper._extract_image(soup),
+                "site_icon_url": scraper._extract_site_icon(soup),
+                "site_name": urlparse(url).netloc.replace("www.", ""),
+            }
+        except Exception as e:
+            print("[Fallback Failed]", e)
+            result["price"] = None
 
-    # Try with BeautifulSoup first
-    bs_result = scraper.scrape_with_bs()
-
-    if bs_result:
-        # Check if the result has essential data
-        has_image = bs_result.get("image_url")
-        has_price = bs_result.get("price")
-
-        if has_image and has_price:
-            return bs_result
-
-    # Fallback to Playwright if BS4 result is missing key data
-    print("[Scraper Pipeline] Falling back to Playwright...")
-    playwright_result = await scraper.scrape_with_playwright()
-
-    return playwright_result or {
-        "title": "Unknown Product",
-        "price": None,
-        "image_url": "",
-        "site_icon_url": "",
-        "site_name": url.split("//")[-1].split("/")[0].replace("www.", "")
-    }
+    return result

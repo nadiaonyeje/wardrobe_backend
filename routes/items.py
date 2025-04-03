@@ -1,5 +1,3 @@
-Please always give me full updated code, I can’t work with snippets of code. Update my items py below 
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from database import items_collection

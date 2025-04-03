@@ -6,10 +6,13 @@ from bson import ObjectId
 from utils.scraper_pipeline import scrape_product_data  # <- Final scraper pipeline
 
 router = APIRouter()
-
+    
 class ItemRequest(BaseModel):
     url: str
     users_id: str
+    ownership: str  # "own" or "wishlist"
+    category: str = None
+    subcategory: str = None
 
 @router.post("/save-item/")
 async def save_item(item: ItemRequest):
@@ -31,10 +34,13 @@ async def save_item(item: ItemRequest):
         item_data = {
             "users_id": item.users_id,
             "source": url,
+            "ownership": item.ownership,
+            "category": item.category,
+            "subcategory": item.subcategory,
             "created_at": datetime.utcnow(),
-            **scraped  # Includes: title, price, image_url(s), icon, site_name
+            **scraped  # title, price, image_url, site_icon_url, site_name
         }
-
+        
         saved_item = await items_collection.insert_one(item_data)
         item_data["id"] = str(saved_item.inserted_id)
         item_data.pop("_id", None)  # Remove MongoDB's ObjectId if it gets included

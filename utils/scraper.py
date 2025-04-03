@@ -12,15 +12,37 @@ class DynamicScraper:
         self.headers = {"User-Agent": USER_AGENT}
         self.base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
 
-    def _format_price(self, raw_price: str) -> str:
-        price = raw_price.replace("£", "").replace("$", "").replace("€", "").strip()
-        if "£" in raw_price:
-            return f"£{price}"
-        elif "$" in raw_price:
-            return f"${price}"
-        elif "€" in raw_price:
-            return f"€{price}"
-        return price
+    def resolve_url(href: str, base_url: str):
+    if not href:
+        return ""
+    if href.startswith("http"):
+        return href
+    if href.startswith("//"):
+        return "https:" + href
+    if href.startswith("/"):
+        return base_url + href
+    return f"{base_url}/{href}"
+
+    def format_price(raw_price: str, currency: str = "") -> str:
+    if not raw_price:
+        return None
+
+    price = raw_price.replace(",", "").strip()
+    
+    try:
+        numeric_price = float(price)
+        formatted_price = f"{numeric_price:.2f}"
+        if formatted_price.endswith(".00"):
+            formatted_price = str(int(numeric_price))
+    except ValueError:
+        return raw_price
+
+    currency_symbols = {
+        "GBP": "£", "USD": "$", "EUR": "€"
+    }
+
+    symbol = currency_symbols.get(currency.upper(), "")
+    return f"{symbol}{formatted_price}"
 
     def _extract_price(self, soup):
         selectors = [
@@ -40,7 +62,9 @@ class DynamicScraper:
             if tag:
                 raw_price = tag.get("content") or tag.text
                 if raw_price and "menu" not in raw_price.lower():
-                    return self._format_price(raw_price)
+                    currency_tag = soup.find("meta", attrs={"property": "product:price:currency"})
+                    currency = currency_tag.get("content") if currency_tag else ""
+                    return format_price(raw_price, currency)
         return None
 
     def _extract_image(self, soup):
@@ -84,6 +108,6 @@ class DynamicScraper:
         return {
             "title": self._extract_title(soup),
             "price": self._extract_price(soup),
-            "image_url": self._extract_image(soup),
-            "site_icon_url": self._extract_site_icon(soup)
+            image_url = resolve_url(image_tag.get("content"), base_url) if image_tag else ""
+            site_icon = resolve_url(icon["href"], base_url) if icon and icon.get("href") else ""
         }
